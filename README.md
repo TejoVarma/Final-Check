@@ -35,7 +35,9 @@ cd frontend
 nvm use
 npm install
 npm run dev
+npm test        # store tests (Vitest)
 ```
+State lives in a Zustand store: `src/store/featureRequests.ts`.
 App: http://localhost:5173. The UI calls relative `/api/...` paths; Vite proxies them to the backend on `localhost:8000` (see `vite.config.ts`), so run the backend too.
 
 ## API
@@ -62,7 +64,8 @@ Deploy in this order: Beanstalk → CloudFront → Amplify.
 
 ### 1. Backend → Elastic Beanstalk
 - Platform: **Python 3.12 running on 64bit Amazon Linux 2023** (`eb init -p python-3.12`). The `Procfile` runs gunicorn + uvicorn workers on port 8000 (nginx on EB proxies to it).
-- Deploy from `backend/`: `eb init` → `eb create` → `eb deploy`.
+- Build the source bundle: `./backend/package.sh` → `backend/dist/backend-<git-sha>.zip` (only `Procfile`, `requirements.txt` and `app/`; never `.env`).
+  Upload it in the EB console (**Upload and deploy**), or deploy from `backend/` with the EB CLI: `eb init` → `eb create` → `eb deploy`.
 - Environment properties (Configuration → Updates, monitoring and logging → Environment properties):
   `ENVIRONMENT=production`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
   `CORS_ORIGINS` is not needed: the browser sees one origin (the Amplify domain), so no cross-origin requests happen.

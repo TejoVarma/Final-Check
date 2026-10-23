@@ -1,20 +1,25 @@
+import { useFeatureRequests } from "../store/featureRequests";
 import { nextStatus, type FeatureRequest } from "../types";
 
 interface Props {
   request: FeatureRequest;
-  onUpvote: (id: string) => void;
-  onAdvance: (request: FeatureRequest) => void;
-  onDelete: (request: FeatureRequest) => void;
 }
 
 const statusClass = (status: string) => "status status-" + status.toLowerCase().replace(" ", "-");
 
-export default function RequestCard({ request, onUpvote, onAdvance, onDelete }: Props) {
+export default function RequestCard({ request }: Props) {
+  const upvote = useFeatureRequests((s) => s.upvote);
+  const advanceStatus = useFeatureRequests((s) => s.advanceStatus);
+  const deleteRequest = useFeatureRequests((s) => s.deleteRequest);
   const next = nextStatus(request.status);
+
+  function handleDelete() {
+    if (window.confirm(`Delete "${request.title}"?`)) void deleteRequest(request.id);
+  }
 
   return (
     <li className="card request">
-      <button className="vote" onClick={() => onUpvote(request.id)} aria-label={`Upvote ${request.title}`}>
+      <button className="vote" onClick={() => upvote(request.id)} aria-label={`Upvote ${request.title}`}>
         <span aria-hidden>▲</span>
         <strong>{request.votes}</strong>
       </button>
@@ -31,8 +36,8 @@ export default function RequestCard({ request, onUpvote, onAdvance, onDelete }: 
         {request.description && <p>{request.description}</p>}
 
         <div className="request-actions">
-          {next && <button onClick={() => onAdvance(request)}>Move to {next}</button>}
-          <button className="danger" onClick={() => onDelete(request)}>
+          {next && <button onClick={() => advanceStatus(request)}>Move to {next}</button>}
+          <button className="danger" onClick={handleDelete}>
             Delete
           </button>
         </div>

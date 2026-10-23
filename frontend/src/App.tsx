@@ -1,59 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "./api";
+import { useEffect } from "react";
 import RequestCard from "./components/RequestCard";
 import RequestForm from "./components/RequestForm";
-import { compareRequests, nextStatus, type FeatureRequest, type NewFeatureRequest, type SortOption } from "./types";
+import { useFeatureRequests } from "./store/featureRequests";
 
 export default function App() {
-  const [requests, setRequests] = useState<FeatureRequest[]>([]);
-  const [sort, setSort] = useState<SortOption>("votes");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const requests = useFeatureRequests((s) => s.requests);
+  const sort = useFeatureRequests((s) => s.sort);
+  const loading = useFeatureRequests((s) => s.loading);
+  const error = useFeatureRequests((s) => s.error);
+  const fetchRequests = useFeatureRequests((s) => s.fetchRequests);
+  const setSort = useFeatureRequests((s) => s.setSort);
+  const clearError = useFeatureRequests((s) => s.clearError);
 
   useEffect(() => {
-    setLoading(true);
-    api
-      .list(sort)
-      .then((rows) => {
-        setRequests(rows);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [sort]);
-
-  const upsert = useCallback(
-    (row: FeatureRequest) =>
-      setRequests((prev) => [row, ...prev.filter((r) => r.id !== row.id)].sort(compareRequests(sort))),
-    [sort],
-  );
-
-  async function run(action: () => Promise<void>) {
-    try {
-      await action();
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  const handleCreate = (body: NewFeatureRequest) => run(async () => upsert(await api.create(body)));
-
-  const handleUpvote = (id: string) => run(async () => upsert(await api.upvote(id)));
-
-  const handleAdvance = (request: FeatureRequest) =>
-    run(async () => {
-      const next = nextStatus(request.status);
-      if (next) upsert(await api.setStatus(request.id, next));
-    });
-
-  const handleDelete = (request: FeatureRequest) => {
-    if (!window.confirm(`Delete "${request.title}"?`)) return;
-    return run(async () => {
-      await api.remove(request.id);
-      setRequests((prev) => prev.filter((r) => r.id !== request.id));
-    });
-  };
+    void fetchRequests();
+  }, [fetchRequests]);
 
   return (
     <main className="container">
@@ -62,12 +23,12 @@ export default function App() {
         <p className="muted">Suggest what we should build next and vote on the ideas you want most.</p>
       </header>
 
-      <RequestForm onSubmit={handleCreate} />
+      <RequestForm />
 
       {error && (
         <div className="error" role="alert">
           {error}
-          <button onClick={() => setError(null)} aria-label="Dismiss">×</button>
+          <button onClick={clearError} aria-label="Dismiss">×</button>
         </div>
       )}
 
@@ -91,13 +52,7 @@ export default function App() {
         ) : (
           <ul className="list">
             {requests.map((r) => (
-              <RequestCard
-                key={r.id}
-                request={r}
-                onUpvote={handleUpvote}
-                onAdvance={handleAdvance}
-                onDelete={handleDelete}
-              />
+              <RequestCard key={r.id} request={r} />
             ))}
           </ul>
         )}

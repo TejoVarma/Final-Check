@@ -1,11 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { CATEGORIES, TITLE_MAX, type Category, type NewFeatureRequest } from "../types";
+import { useFeatureRequests } from "../store/featureRequests";
+import { CATEGORIES, TITLE_MAX, type Category } from "../types";
 
-interface Props {
-  onSubmit: (body: NewFeatureRequest) => Promise<void>;
-}
-
-export default function RequestForm({ onSubmit }: Props) {
+export default function RequestForm() {
+  const createRequest = useFeatureRequests((s) => s.createRequest);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<Category>("UI");
@@ -17,13 +15,13 @@ export default function RequestForm({ onSubmit }: Props) {
     e.preventDefault();
     if (!trimmedTitle) return;
     setSubmitting(true);
-    try {
-      await onSubmit({ title: trimmedTitle, description: description.trim() || null, category });
+    const created = await createRequest({ title: trimmedTitle, description: description.trim() || null, category });
+    setSubmitting(false);
+    // Keep what the user typed if the request failed, so they can retry.
+    if (created) {
       setTitle("");
       setDescription("");
       setCategory("UI");
-    } finally {
-      setSubmitting(false);
     }
   }
 
