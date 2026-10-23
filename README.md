@@ -34,10 +34,9 @@ API docs: http://localhost:8000/docs · Health: http://localhost:8000/api/health
 cd frontend
 nvm use
 npm install
-cp .env.example .env        # VITE_API_URL=http://localhost:8000
 npm run dev
 ```
-App: http://localhost:5173
+App: http://localhost:5173. The UI calls relative `/api/...` paths; Vite proxies them to the backend on `localhost:8000` (see `vite.config.ts`), so run the backend too.
 
 ## API
 
@@ -51,17 +50,42 @@ App: http://localhost:5173
 
 ## Deployment
 
-### Backend → Elastic Beanstalk
+Request path in production — the browser only ever talks to the Amplify domain:
+
+```
+Browser ──HTTPS──▶ Amplify (https://<app>.amplifyapp.com)
+                     ├─ /api/*  ──rewrite (200 proxy)──▶ CloudFront (HTTPS) ──HTTP──▶ Elastic Beanstalk
+                     └─ /*      ──▶ index.html (React app)
+```
+
+Deploy in this order: Beanstalk → CloudFront → Amplify.
+
+### 1. Backend → Elastic Beanstalk
 - Platform: **Python 3.12 running on 64bit Amazon Linux 2023** (`eb init -p python-3.12`). The `Procfile` runs gunicorn + uvicorn workers on port 8000 (nginx on EB proxies to it).
 - Deploy from `backend/`: `eb init` → `eb create` → `eb deploy`.
-- Set environment properties in EB (Configuration → Updates, monitoring and logging → Environment properties):
-  `ENVIRONMENT=production`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `CORS_ORIGINS=https://<branch>.<app-id>.amplifyapp.com`
-- **HTTPS is required**: Amplify serves over HTTPS, so browsers block calls to a plain-HTTP EB URL. Add an HTTPS listener (ACM certificate) on the EB load balancer, typically with a custom domain like `api.yourdomain.com`.
+- Environment properties (Configuration → Updates, monitoring and logging → Environment properties):
+  `ENVIRONMENT=production`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
+  `CORS_ORIGINS` is not needed: the browser sees one origin (the Amplify domain), so no cross-origin requests happen.
+- Check: `http://<env>.<region>.elasticbeanstalk.com/api/health`
 
-### Frontend → Amplify
-- Connect the Git repo in Amplify; it picks up `amplify.yml` (app root = `frontend`). Enable "monorepo" and set app root to `frontend` if prompted. The build runs on Node 22 (set in `amplify.yml`).
-- Environment variable: `VITE_API_URL=https://<your-backend-domain>`
-- For client-side routing, add a rewrite: source `</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>` → target `/index.html` → type `200 (Rewrite)`.
+### 2. HTTPS → CloudFront in front of Beanstalk
+Create a distribution with these settings (the defaults will break the API):
+
+| Setting | Value | Why |
+|---|---|---|
+| Origin domain | `<env>.<region>.elasticbeanstalk.com` | |
+| Origin protocol | **HTTP only**, port 80 | EB has no HTTPS listener |
+| Viewer protocol policy | Redirect HTTP to HTTPS | |
+| Allowed HTTP methods | **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE** | Default is GET/HEAD only, which blocks submit/upvote/status/delete |
+| Cache policy | **CachingDisabled** | Otherwise vote counts and lists are served stale |
+| Origin request policy | **AllViewerExceptHostHeader** | Forwards query strings (`?sort=`), headers and body |
+
+- Check: `https://<id>.cloudfront.net/api/health`
+
+### 3. Frontend → Amplify
+- Connect the GitHub repo; Amplify picks up `amplify.yml` (monorepo, app root `frontend`, Node 22). No environment variables needed.
+- **Rewrites and redirects → Manage → Open text editor**: paste [`frontend/amplify-rewrites.json`](frontend/amplify-rewrites.json) with `REPLACE_WITH_CLOUDFRONT_DOMAIN` set to your `<id>.cloudfront.net`. Keep the `/api/<*>` rule **first**; the second rule is the SPA fallback to `index.html`.
+- Check: `https://<branch>.<app-id>.amplifyapp.com/api/health`, then `/api/requests?sort=newest` to confirm query strings pass through the rewrite.
 
 ## Secrets
 `.env` files are git-ignored. The Supabase **secret key** is backend-only and must never be put in the frontend.
