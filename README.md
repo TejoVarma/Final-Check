@@ -87,7 +87,12 @@ Create a distribution with these settings (the defaults will break the API):
 
 ### 3. Frontend → Amplify
 - Connect the GitHub repo; Amplify picks up `amplify.yml` (monorepo, app root `frontend`, Node 22). No environment variables needed.
-- **Rewrites and redirects → Manage → Open text editor**: paste [`frontend/amplify-rewrites.json`](frontend/amplify-rewrites.json) with `REPLACE_WITH_CLOUDFRONT_DOMAIN` set to your `<id>.cloudfront.net`. Keep the `/api/<*>` rule **first**; the second rule is the SPA fallback to `index.html`.
+- **Rewrites and redirects → Manage**: add these rules in this order (the `/api` rule must be **first**):
+
+  | Source | Target | Type |
+  |---|---|---|
+  | `/api/<*>` | `https://<cloudfront-domain>/api/<*>` | 200 (Rewrite) |
+  | `</^[^.]+$\|\.(?!(css\|gif\|ico\|jpg\|js\|png\|txt\|svg\|woff\|woff2\|ttf\|map\|json\|webp)$)([^.]+$)/>` | `/index.html` | 200 (Rewrite) |
 - Check: `https://<branch>.<app-id>.amplifyapp.com/api/health`, then `/api/requests?sort=newest` to confirm query strings pass through the rewrite.
 
 ## Secrets
